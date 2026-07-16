@@ -406,3 +406,5 @@ are connected via the Internet Protocol and that doesn't necessarily imply WiFi.
 [![Packaging status](
 https://repology.org/badge/vertical-allrepos/weylus.svg
 )](https://repology.org/project/weylus/versions)
+
+<!-- build trigger: pen pressure -->
