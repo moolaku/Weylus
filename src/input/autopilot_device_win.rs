@@ -143,14 +143,34 @@ impl InputDevice for WindowsInput {
                         .insert(event.pointer_id, pointer_type_info);
                     let len = self.multitouch_map.len();
 
+                    // Build the injection frame from every active contact. Windows
+                    // rejects the whole frame if a contact that is already down is
+                    // sent with POINTER_FLAG_DOWN again, so every finger EXCEPT the
+                    // one that changed this event is demoted to a plain in-contact
+                    // UPDATE (preserving whichever finger is primary). Without this,
+                    // a second finger landing before the first has moved produces a
+                    // malformed frame and the gesture reads as a single touch.
                     let mut pointer_type_info_vec: Vec<POINTER_TYPE_INFO> = Vec::new();
-                    for (_i, info) in self.multitouch_map.iter().enumerate() {
-                        pointer_type_info_vec.push(*info.1);
+                    for (id, info) in self.multitouch_map.iter() {
+                        let mut info = *info;
+                        if *id != event.pointer_id {
+                            let touch = info.u.touchInfo_mut();
+                            let was_primary =
+                                touch.pointerInfo.pointerFlags & POINTER_FLAG_PRIMARY;
+                            touch.pointerInfo.pointerFlags = POINTER_FLAG_INRANGE
+                                | POINTER_FLAG_INCONTACT
+                                | POINTER_FLAG_UPDATE
+                                | was_primary;
+                            touch.pointerInfo.ButtonChangeType = POINTER_CHANGE_NONE;
+                        }
+                        pointer_type_info_vec.push(info);
                     }
-                    let b: Box<[POINTER_TYPE_INFO]> = pointer_type_info_vec.into_boxed_slice();
-                    let m: *mut POINTER_TYPE_INFO = Box::into_raw(b) as _;
 
-                    InjectSyntheticPointerInput(self.touch_device_handle, m, len as u32);
+                    InjectSyntheticPointerInput(
+                        self.touch_device_handle,
+                        pointer_type_info_vec.as_mut_ptr(),
+                        len as u32,
+                    );
 
                     match event.event_type {
                         PointerEventType::DOWN
